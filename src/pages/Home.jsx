@@ -1,4 +1,4 @@
-import React, { useContext, useRef } from "react";
+import React, { useCallback, useContext, useRef } from "react";
 import qs from "qs";
 import axios from "axios";
 import { useDispatch, useSelector } from "react-redux";
@@ -8,6 +8,7 @@ import {
   setPageCount,
   setFilters,
 } from "../redux/slices/filterSlice";
+import { setItems } from "../redux/slices/pizzasSlice";
 import { Categories } from "../components/Categories/Categories";
 import { list, Sort } from "../components/Sort/Sort";
 import { PizzaBlock } from "../components/PizzaBlock/PizzaBlock";
@@ -21,14 +22,13 @@ export const Home = () => {
   const dispatch = useDispatch();
   const isSearch = useRef(false);
   const isMounted = useRef(false);
-
+  const items = useSelector((state) => state.pizzas.items);
   const { categoryId, sort, currentPage } = useSelector(
     (state) => state.filter
   );
 
   const sortType = sort.sortProperty;
   const { searchValue } = useContext(SearchContext);
-  const [items, setItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const onClickCategory = (id) => {
@@ -39,7 +39,7 @@ export const Home = () => {
     dispatch(setPageCount(number));
   };
 
-  const fetchPizzas = () => {
+  const fetchPizzas = useCallback(async () => {
     setIsLoading(true);
 
     const order = sortType.includes("-") ? "asc" : "desc";
@@ -49,20 +49,23 @@ export const Home = () => {
 
     const limit = category ? 4 : 1000;
 
-    axios
-      .get(
+    try {
+      const { data } = await axios.get(
         `https://6673f9ad75872d0e0a9494bb.mockapi.io/react-pizza-v2?page=${currentPage}&limit=${limit}&${category}&sortBy=${sortBy}&order=${order}${search}`
-      )
-      .then((res) => {
-        setItems(res.data);
-        setIsLoading(false);
-      });
-  };
+      );
+      dispatch(setItems(data));
+    } catch (error) {
+      alert("Ошибка при получении пицц");
+    } finally {
+      setIsLoading(false);
+    }
+    window.scrollTo(0, 0);
+  }, [categoryId, currentPage, searchValue, sortType]);
 
   useEffect(() => {
     if (isMounted.current) {
       const queryString = qs.stringify({
-        sortProperty: sort.sortProperty,
+        sortProperty: sortType,
         categoryId,
         currentPage,
       });
@@ -70,7 +73,7 @@ export const Home = () => {
       navigate(`?${queryString}`);
     }
     isMounted.current = true;
-  }, [categoryId, sortType, searchValue, currentPage]);
+  }, [categoryId, sortType, searchValue, currentPage, navigate]);
 
   useEffect(() => {
     if (window.location.search) {
@@ -86,7 +89,7 @@ export const Home = () => {
       );
       isSearch.current = true;
     }
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -96,7 +99,7 @@ export const Home = () => {
     }
 
     isSearch.current = false;
-  }, [categoryId, sortType, searchValue, currentPage]);
+  }, [categoryId, sortType, searchValue, currentPage, fetchPizzas]);
 
   const pizzas = items.map((obj) => <PizzaBlock key={obj.id} {...obj} />);
   const skeletons = [...new Array(6)].map((_, index) => (
