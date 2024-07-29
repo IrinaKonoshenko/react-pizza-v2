@@ -1,6 +1,5 @@
 import React, { useCallback, useContext, useRef } from "react";
 import qs from "qs";
-import axios from "axios";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import {
@@ -8,12 +7,12 @@ import {
   setPageCount,
   setFilters,
 } from "../redux/slices/filterSlice";
-import { setItems } from "../redux/slices/pizzasSlice";
+import { fetchPizzas } from "../redux/slices/pizzasSlice";
 import { Categories } from "../components/Categories/Categories";
 import { list, Sort } from "../components/Sort/Sort";
 import { PizzaBlock } from "../components/PizzaBlock/PizzaBlock";
 import { Skeleton } from "../components/PizzaBlock/Skeleton";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Pagination } from "../components/Pagination/Pagination";
 import { SearchContext } from "../App";
 
@@ -22,14 +21,13 @@ export const Home = () => {
   const dispatch = useDispatch();
   const isSearch = useRef(false);
   const isMounted = useRef(false);
-  const items = useSelector((state) => state.pizzas.items);
+  const { items, status } = useSelector((state) => state.pizzas);
   const { categoryId, sort, currentPage } = useSelector(
     (state) => state.filter
   );
 
   const sortType = sort.sortProperty;
   const { searchValue } = useContext(SearchContext);
-  const [isLoading, setIsLoading] = useState(true);
 
   const onClickCategory = (id) => {
     dispatch(setCategoryId(id));
@@ -39,9 +37,7 @@ export const Home = () => {
     dispatch(setPageCount(number));
   };
 
-  const fetchPizzas = useCallback(async () => {
-    setIsLoading(true);
-
+  const getPizzas = useCallback(async () => {
     const order = sortType.includes("-") ? "asc" : "desc";
     const sortBy = sortType.replace("-", "");
     const category = categoryId > 0 ? `category=${categoryId}` : "";
@@ -49,18 +45,19 @@ export const Home = () => {
 
     const limit = category ? 4 : 1000;
 
-    try {
-      const { data } = await axios.get(
-        `https://6673f9ad75872d0e0a9494bb.mockapi.io/react-pizza-v2?page=${currentPage}&limit=${limit}&${category}&sortBy=${sortBy}&order=${order}${search}`
-      );
-      dispatch(setItems(data));
-    } catch (error) {
-      alert("Ошибка при получении пицц");
-    } finally {
-      setIsLoading(false);
-    }
+    dispatch(
+      fetchPizzas({
+        sortBy,
+        order,
+        category,
+        search,
+        limit,
+        currentPage,
+      })
+    );
+
     window.scrollTo(0, 0);
-  }, [categoryId, currentPage, searchValue, sortType]);
+  }, [categoryId, currentPage, searchValue, sortType, dispatch]);
 
   useEffect(() => {
     if (isMounted.current) {
@@ -95,11 +92,11 @@ export const Home = () => {
     window.scrollTo(0, 0);
 
     if (!isSearch.current) {
-      fetchPizzas();
+      getPizzas();
     }
 
     isSearch.current = false;
-  }, [categoryId, sortType, searchValue, currentPage, fetchPizzas]);
+  }, [categoryId, sortType, searchValue, currentPage, getPizzas]);
 
   const pizzas = items.map((obj) => <PizzaBlock key={obj.id} {...obj} />);
   const skeletons = [...new Array(6)].map((_, index) => (
@@ -113,7 +110,19 @@ export const Home = () => {
         <Sort />
       </div>
       <h2 className="content__title">Все пиццы</h2>
-      <div className="content__items">{isLoading ? skeletons : pizzas}</div>
+      {status === "error" ? (
+        <div className="content__error-info">
+          <h2>Произошла ошибка</h2>
+          <p>
+            К сожалению, не удалось получить питсы. Попробуйте повторить попытку
+            позже!
+          </p>
+        </div>
+      ) : (
+        <div className="content__items">
+          {status === "loading" ? skeletons : pizzas}
+        </div>
+      )}
       <Pagination currentPage={currentPage} onChangePage={onChangePage} />
     </div>
   );
